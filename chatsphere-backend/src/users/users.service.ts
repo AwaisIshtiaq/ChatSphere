@@ -12,20 +12,20 @@ export class UsersService {
     private usersRepo: Repository<User>,
   ) {}
 
-  // Get all users (we'll use this to show online members in ChatSphere)
-findAll(): Promise<User[]> {
-  return this.usersRepo.find({
-    select: {
-      id: true,
-      username: true,
-      email: true,
-      isOnline: true,
-      createdAt: true,
-    },
-  });
-}
+  // Get all users
+  findAll(): Promise<User[]> {
+    return this.usersRepo.find({
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        isOnline: true,
+        createdAt: true,
+      },
+    });
+  }
 
-  // Find a single user by their ID
+  // Find a single user by ID
   findOne(id: string): Promise<User | null> {
     return this.usersRepo.findOneBy({ id });
   }
@@ -41,13 +41,11 @@ findAll(): Promise<User[]> {
     email: string;
     password: string;
   }): Promise<User> {
-    // Check if email is already taken
     const existing = await this.findByEmail(data.email);
     if (existing) {
       throw new ConflictException('Email is already registered');
     }
 
-    // Hash the password before saving — NEVER save plain text passwords
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
     const user = this.usersRepo.create({
@@ -56,5 +54,10 @@ findAll(): Promise<User[]> {
     });
 
     return this.usersRepo.save(user);
+  }
+
+  // Update online status — used by WebSocket gateway
+  async setOnlineStatus(id: string, isOnline: boolean): Promise<void> {
+    await this.usersRepo.update(id, { isOnline });
   }
 }
