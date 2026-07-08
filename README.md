@@ -150,3 +150,7 @@ Connect to the backend Socket.io server with a JWT token in the handshake auth.
 ## License
 
 This project is licensed under the [GPL-3.0 License](LICENSE).
+
+---
+
+*Last updated: July 2026*

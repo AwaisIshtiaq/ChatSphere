@@ -21,11 +21,31 @@ export class MessagesService {
     return this.messagesRepo.save(message);
   }
 
-  findByRoom(roomId: string): Promise<Message[]> {
-    return this.messagesRepo.find({
-      where: { roomId },
-      relations: {user : true},     // joins the User table automatically
-      order: { createdAt: 'ASC' },
-    });
-  }
+async findByRoom(
+  roomId: string,
+  page: number = 1,
+  limit: number = 20,
+): Promise<{ messages: Message[]; total: number; page: number }> {
+  const [messages, total] = await this.messagesRepo.findAndCount({
+    where: { roomId },
+    relations: { user: true },
+    order: { createdAt: 'DESC' },   // newest first
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  return {
+    messages: messages.reverse(), // reverse so oldest is at top
+    total,
+    page,
+  };
+}
+  
+  findById(id: string): Promise<Message | null> {
+  return this.messagesRepo.findOne({
+    where: { id },
+    relations: { user: true },
+  });
+}
+
 }

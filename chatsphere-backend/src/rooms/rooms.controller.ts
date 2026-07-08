@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor } from '@nestjs/cache-manager';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 
 @Controller('rooms')
-@UseGuards(JwtAuthGuard)   // ← protects EVERY route in this controller
+@UseGuards(JwtAuthGuard)
 export class RoomsController {
 
   constructor(private roomsService: RoomsService) {}
@@ -15,6 +16,7 @@ export class RoomsController {
   }
 
   @Get()
+  @UseInterceptors(CacheInterceptor)  // ← caches this response for 30 seconds
   findAll() {
     return this.roomsService.findAll();
   }

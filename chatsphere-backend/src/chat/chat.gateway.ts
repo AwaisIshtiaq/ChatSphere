@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Next.js frontend URL
+    origin: '*',
     credentials: false,
   },
 })
@@ -24,8 +24,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  // Track which socket belongs to which user
-  private connectedUsers = new Map<string, string>(); // socketId → userId
+  private connectedUsers = new Map<string, string>();
 
   constructor(
     private messagesService: MessagesService,
@@ -34,10 +33,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private configService: ConfigService,
   ) {}
 
-  // ─── Runs when a client connects ────────────────────────────────────────────
+  // ─── Connection ──────────────────────────────────────────────────────────────
   async handleConnection(client: Socket) {
     try {
-      // Extract JWT token from handshake
       const token =
         client.handshake.auth?.token ||
         client.handshake.headers?.authorization?.split(' ')[1];
@@ -47,56 +45,48 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      // Verify the token
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      // Store the connection
       this.connectedUsers.set(client.id, payload.sub);
-
-      // Update user as online in DB
       await this.usersService.setOnlineStatus(payload.sub, true);
 
-      // Tell everyone this user is online
       this.server.emit('userOnline', {
         userId: payload.sub,
         username: payload.username,
       });
 
-      console.log(`✅ Client connected: ${payload.username}`);
+      console.log(`✅ Connected: ${payload.username}`);
     } catch (err) {
-      // Invalid token → disconnect immediately
       client.disconnect();
     }
   }
 
-  // ─── Runs when a client disconnects ─────────────────────────────────────────
+  // ─── Disconnection ───────────────────────────────────────────────────────────
   async handleDisconnect(client: Socket) {
     const userId = this.connectedUsers.get(client.id);
 
     if (userId) {
       await this.usersService.setOnlineStatus(userId, false);
-
       this.server.emit('userOffline', { userId });
-
       this.connectedUsers.delete(client.id);
-      console.log(`❌ Client disconnected: ${userId}`);
+      console.log(`❌ Disconnected: ${userId}`);
     }
   }
 
-  // ─── Join a chat room ────────────────────────────────────────────────────────
+  // ─── Join Room ───────────────────────────────────────────────────────────────
   @SubscribeMessage('joinRoom')
   handleJoinRoom(
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    client.join(data.roomId); // Socket.io room = our ChatSphere room
+    client.join(data.roomId);
     client.emit('joinedRoom', { roomId: data.roomId });
     console.log(`👤 Socket ${client.id} joined room ${data.roomId}`);
   }
 
-  // ─── Leave a chat room ───────────────────────────────────────────────────────
+  // ─── Leave Room ──────────────────────────────────────────────────────────────
   @SubscribeMessage('leaveRoom')
   handleLeaveRoom(
     @MessageBody() data: { roomId: string },
@@ -106,7 +96,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.emit('leftRoom', { roomId: data.roomId });
   }
 
-  // ─── Send a message ──────────────────────────────────────────────────────────
+  // ─── Send Message ─────────────────────────────────────────────────────────────
   @SubscribeMessage('sendMessage')
   async handleMessage(
     @MessageBody() data: { roomId: string; content: string },
@@ -119,20 +109,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Save message to database
     const message = await this.messagesService.create(
       data.roomId,
       userId,
       { content: data.content },
     );
 
-    // Broadcast to everyone in the room (including sender)
+    const fullMessage = await this.messagesService.findById(message.id);
+
+    if (!fullMessage) return;
+
     this.server.to(data.roomId).emit('receiveMessage', {
-      id: message.id,
-      content: message.content,
-      userId: message.userId,
-      roomId: message.roomId,
-      createdAt: message.createdAt,
+      id: fullMessage.id,
+      content: fullMessage.content,
+      userId: fullMessage.userId,
+      roomId: fullMessage.roomId,
+      createdAt: fullMessage.createdAt,
+      user: { username: fullMessage.user?.username || 'Unknown' },
+    });
+  }
+
+  // ─── Typing Indicator ─────────────────────────────────────────────────────────
+  @SubscribeMessage('typing')
+  handleTyping(
+    @MessageBody() data: { roomId: string; isTyping: boolean },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = this.connectedUsers.get(client.id);
+    if (!userId) return;
+
+    client.to(data.roomId).emit('userTyping', {
+      userId,
+      isTyping: data.isTyping,
     });
   }
 }

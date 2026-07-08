@@ -1,10 +1,10 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
-@Controller('rooms/:roomId/messages')   // ← nested route: /rooms/abc-123/messages
+@Controller('rooms/:roomId/messages')
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
 
@@ -20,7 +20,11 @@ export class MessagesController {
   }
 
   @Get()
-  findAll(@Param('roomId') roomId: string) {
-    return this.messagesService.findByRoom(roomId);
+  findAll(
+    @Param('roomId') roomId: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+  ) {
+    return this.messagesService.findByRoom(roomId, +page, +limit);
   }
 }
